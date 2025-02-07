@@ -78,7 +78,7 @@ If you find this code useful, please consider citing our paper:
 @inproceedings{
 zhiwenruan2025layalign,
 title={LayAlign: Enhancing Multilingual Reasoning in Large Language Models via Layer-Wise Adaptive Fusion and Alignment Strategy},
-author={Zhiwen Ruan, Yixia Li, He Zhu, Longyue Wang, Weihua Luo, Kaifu Zhang, Yun Chen, Guanhua Chen},
+author={Zhiwen Ruan and Yixia Li and He Zhu and Longyue Wang and Weihua Luo and Kaifu Zhang and Yun Chen and Guanhua Chen},
 booktitle={The 2025 Annual Conference of the Nations of the Americas Chapter of the ACL},
 year={2025},
 url={https://openreview.net/forum?id=KmRjOLJISJ}
