@@ -46,7 +46,7 @@ It is important to note that MindMerger later modified its mathematical training
 
 We use the checkpoint of LayAlign for math based on [MetaMath-7B-V1.0](https://huggingface.co/meta-math/MetaMath-7B-V1.0), for x-csqa based on [LLaMAX-7B-X-CSQA](https://huggingface.co/LLaMAX/LLaMAX2-7B-X-CSQA), and for xnli based on [LLaMAX-7B-X-XNLI](https://huggingface.co/LLaMAX/LLaMAX2-7B-XNLI). [mT5-xl](https://huggingface.co/google/mt5-xl) is used as multilingual encoder. 
 
-You can also download the [checkpoint](https://huggingface.co/zwRuan/LayAlign/tree/main) we trained on math tasks using MetaMath-7B-V1.0 and mT5-xl.
+You can also download the [checkpoint](https://huggingface.co/SUSTech-NLP/LayAlign/tree/main) we trained on math tasks using MetaMath-7B-V1.0 and mT5-xl.
 
 
 
