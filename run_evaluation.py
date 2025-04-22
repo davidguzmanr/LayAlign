@@ -13,6 +13,87 @@ import deepspeed
 from tools.deepspeed_config import get_train_ds_config
 from LayAlign import LayAlign,LayAlignConfig
 from types import SimpleNamespace
+from datasets import load_dataset
+
+def read_afrimgsm():
+    langs_map = {
+        "amh": "Amharic",
+        "eng": "English",
+        "ewe": "Ewe",
+        "fra": "French",
+        "hau": "Hausa",
+        "ibo": "Igbo",
+        "kin": "Kinyarwanda",
+        "lin": "Lingala",
+        "lug": "Luganda",
+        "orm": "Oromo",
+        "sna": "Shona",
+        "sot": "Sotho",
+        "swa": "Swahili",
+        "twi": "Twi",
+        # "vai": "Vai", # poor performance due to its unique script
+        "wol": "Wolof",
+        "xho": "Xhosa",
+        "yor": "Yoruba",
+        "zul": "Zulu"
+    }
+
+    datasets_test = {}
+    for lang in langs_map:
+        ds = load_dataset("masakhane/afrimgsm", lang, split="test")
+        samples = []
+        for sample in ds:
+            samples.append({
+                'source': str(sample['question']),
+                'target': str(sample['answer_number']),
+                'source_language': langs_map[lang],
+                'target_language': langs_map[lang]
+            })
+        
+        datasets_test[langs_map[lang]] = samples
+
+    return datasets_test
+
+def read_afri_xnli():
+    langs_map = {
+        "amh": "Amharic",
+        "eng": "English",
+        "ewe": "Ewe",
+        "fra": "French",
+        "hau": "Hausa",
+        "ibo": "Igbo",
+        "kin": "Kinyarwanda",
+        "lin": "Lingala",
+        "lug": "Luganda",
+        "orm": "Oromo",
+        "sna": "Shona",
+        "sot": "Sotho",
+        "swa": "Swahili",
+        "twi": "Twi",
+        # "vai": "Vai", # poor performance due to its unique script
+        "wol": "Wolof",
+        "xho": "Xhosa",
+        "yor": "Yoruba",
+        "zul": "Zulu"
+    }
+    datasets_test = {}
+    for lang in langs_map:
+        ds = load_dataset("masakhane/afrixnli", lang)["test"]
+        id_to_label = {0: "entailment", 1: "neutral", 2: "contradiction"}
+        samples = []
+        for sample in ds:
+            sample["sentence1"] = sample["premise"]
+            sample["sentence2"] = sample["hypothesis"]
+            sample["target"] = id_to_label[sample["label"]]
+            sample["source_language"] = lang
+            sample["target_language"] = "English"
+
+            samples.append(sample)
+
+        datasets_test[langs_map[lang]] = samples
+
+    return datasets_test
+
 def main(args):
     llm_path = args.llm_path
     mt_path = args.mt_path
@@ -28,9 +109,11 @@ def main(args):
 
     result_path_base = f'./results/{save_name}/{task}/'
 
-    if 'mgsm' in task:
-        test_sets = read_mgsms()
+    if 'afrimgsm' in task:
+        test_sets = read_afrimgsm()
         task = 'math'
+    elif "afrixnli" in task:
+        test_sets = read_afri_xnli()
     elif 'msvamp' in task:
         test_sets = read_msvamp()
         task = 'math'
@@ -102,6 +185,12 @@ def main(args):
         model.load_state_dict(checkpoint, True)
         print('mapping init from:', init_checkpoint)
     # model = model.cuda()
+    
+    # This for a problem with mT5 models and DeepSpeed
+    for param in model.parameters():
+        if not param.data.is_contiguous():
+            param.data = param.data.contiguous()
+
     parameters = filter(lambda p: p.requires_grad, model.parameters())
     model, optimizer, _, __ = deepspeed.initialize(
         config=ds_config,
@@ -233,12 +322,66 @@ if __name__ == "__main__":
                      'Portuguese': 'pt', 'Albanian': 'sq', 'Serbian': 'sr', 'Turkish': 'tr',
                      'Vietnamese': 'vi', 'Hindi': 'hi', 'Flemish': 'nl', 'Urdu': 'ur'}
     langs_map_nllb = {
-        'English': 'eng_Latn', 'Swahili': 'swh_Latn', 'Chinese': 'zho_Hans', 'Bengali': 'ben_Beng',
-        'German': 'deu_Latn', 'Spanish': 'spa_Latn', 'French': 'fra_Latn', 'Japanese': 'jpn_Jpan',
-        'Russian': 'rus_Cyrl', 'Thai': 'tha_Thai'
+        "English": "eng_Latn",
+        "Swahili": "swh_Latn",
+        "Chinese": "zho_Hans",
+        "Bengali": "ben_Beng",
+        "German": "deu_Latn",
+        "Spanish": "spa_Latn",
+        "French": "fra_Latn",
+        "Japanese": "jpn_Jpan",
+        "Russian": "rus_Cyrl",
+        "Thai": "tha_Thai",
+        "Greek": "ell_Grek",
+        "Telugu": "tel_Telu",
+        "Arabic": "arb_Arab", # could be arb_Latn, we don't use it tho
+        "Bulgarian": "bul_Cyrl",
+        "Croatian": "hrv_Latn",
+        "Hungarian": "hun_Latn",
+        "Italian": "ita_Latn",
+        "Lithuanian": "lit_Latn",
+        "Macedonian": "mkd_Cyrl",
+        "Polish": "pol_Latn",
+        "Portuguese": "por_Latn",
+        "Albanian": "als_Latn",
+        "Serbian": "srp_Cyrl",
+        "Turkish": "tur_Latn",
+        "Vietnamese": "vie_Latn",
+        "Hindi": "hin_Deva",
+        # "Flemish": "nl",
+        "Urdu": "urd_Arab",
+        "Amharic": "amh_Ethi",
+        "Ewe": "ewe_Latn",
+        "Hausa": "hau_Latn",
+        "Igbo": "ibo_Latn",
+        "Kinyarwanda": "kin_Latn",
+        "Lingala": "lin_Latn",
+        "Luganda": "lug_Latn",
+        "Oromo": "gaz_Latn",
+        "Shona": "sna_Latn",
+        "Sotho": "sot_Latn",
+        "Wolof": "wol_Latn",
+        "Twi": "twi_Latn",
+        "Xhosa": "xho_Latn",
+        "Yoruba": "yor_Latn",
+        "Zulu": "zul_Latn",
+    }
+    # langs_map_afrimgsm = {
+    #     'Amharic': 'amh', 'English': 'eng', 'Ewe': 'ewe', 'French': 'fra', 'Hausa': 'hau',
+    #     'Igbo': 'ibo', 'Kinyarwanda': 'kin', 'Lingala': 'lin', 'Luganda': 'lug', 'Oromo': 'orm', 
+    #     'Shona': 'sna', 'Sotho': 'sot', 'Swahili': 'swa', 'Twi': 'twi', 'Vai': 'vai', 'Wolof': 'wol', 
+    #     'Xhosa': 'xho', 'Yoruba': 'yor', 'Zulu': 'zul'
+    # }
+    langs_map_afrimgsm = {
+        'Amharic': 'am', 'English': 'en', 'Ewe': 'ee', 'French': 'fr', 'Hausa': 'ha',
+        'Igbo': 'ig', 'Kinyarwanda': 'rw', 'Lingala': 'ln', 'Luganda': 'lg', 'Oromo': 'om', 
+        'Shona': 'sn', 'Sotho': 'st', 'Swahili': 'sw', 'Twi': 'tw', 'Vai': 'vai', 'Wolof': 'wo', 
+        'Xhosa': 'xh', 'Yoruba': 'yo', 'Zulu': 'zu'
     }
     if 'nllb' in args.mt_path:
         langs_map = langs_map_nllb
     else:
-        langs_map = langs_map_m2m
+        langs_map = langs_map_afrimgsm
+    
+    print(f"Task={args.task} \n {langs_map_afrimgsm}")
     main(args)
