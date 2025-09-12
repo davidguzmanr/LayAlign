@@ -90,3 +90,10 @@ year={2025},
 url={https://openreview.net/forum?id=KmRjOLJISJ}
 }
 ```
+
+# Canada Compute issue
+- deepspeed==0.17.1 having issues with pydantic
+- deepspeed==0.14.5 having issues with `hostname -I`, which is the version the authors used. I am making the changes in 
+  - `~/scratch/AfricanLLM/LayAlign-env/lib/python3.10/site-packages/deepspeed/comm/comm.py`
+  - `~/scratch/AfricanLLM/LayAlign-env/lib/python3.10/site-packages/deepspeed/elasticity/elastic_agent.py`
+  - `~/scratch/AfricanLLM/LayAlign-env/lib/python3.10/site-packages/deepspeed/launcher/runner.py`
