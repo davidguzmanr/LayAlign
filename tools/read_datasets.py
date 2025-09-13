@@ -4,13 +4,52 @@ import random
 from datasets import load_dataset
 
 
-langs_map = {'English': 'en', 'Swahili': 'sw', 'Chinese': 'zh', 'Bengali': 'bn',
-                     'German': 'de', 'Spanish': 'es', 'French': 'fr', 'Japanese': 'ja',
-                     'Russian': 'ru', 'Thai': 'th','Telugu': 'te', 'Greek': 'el',
-                     'Arabic': 'ar', 'Bulgarian': 'bg', 'Croatian': 'hr', 'Hungarian': 'hu',
-                     'Italian': 'it', 'Lithuanian': 'lt', 'Macedonian': 'mk', 'Polish': 'pl',
-                     'Portuguese': 'pt', 'Albanian': 'sq', 'Serbian': 'sr', 'Turkish': 'tr',
-                     'Vietnamese': 'vi', 'Hindi': 'hi', 'Flemish': 'nl', 'Urdu': 'ur'}
+langs_map = {
+    "English": "en",
+    "Swahili": "sw",
+    "Chinese": "zh",
+    "Bengali": "bn",
+    "German": "de",
+    "Spanish": "es",
+    "French": "fr",
+    "Japanese": "ja",
+    "Russian": "ru",
+    "Thai": "th",
+    "Greek": "el",
+    "Telugu": "te",
+    "Arabic": "ar",
+    "Bulgarian": "bg",
+    "Croatian": "hr",
+    "Hungarian": "hu",
+    "Italian": "it",
+    "Lithuanian": "lt",
+    "Macedonian": "mk",
+    "Polish": "pl",
+    "Portuguese": "pt",
+    "Albanian": "sq",
+    "Serbian": "sr",
+    "Turkish": "tr",
+    "Vietnamese": "vi",
+    "Hindi": "hi",
+    "Flemish": "nl",
+    "Urdu": "ur",
+    "Amharic": "am",
+    "Ewe": "ee",
+    "Hausa": "ha",
+    "Igbo": "ig",
+    "Kinyarwanda": "rw",
+    "Lingala": "ln",
+    "Luganda": "lg",
+    "Oromo": "om",
+    "Shona": "sn",
+    "Sotho": "st",
+    "Wolof": "wo",
+    "Twi": "tw",
+    "Xhosa": "xh",
+    "Yoruba": "yo",
+    "Zulu": "zu",
+}
+
 
 class Data(Dataset):
     def __init__(self, dataset_path, split):
@@ -92,6 +131,89 @@ class MathDataset(Dataset):
         else:
             sample['prompt'] = construct_prompt_math(sample['source'])
         return sample
+
+def read_afri_lego(train_num, languages):
+    dataset_train = []
+    for train_name in languages:
+        train_name_map = langs_map[train_name]
+        path_base = f'./datas/african_bilingual_pairs/en-{train_name_map}'
+        path_src = f'{path_base}/train_9k.{train_name_map}'
+        path_trg = f'{path_base}/train_9k.en'
+        sources = read_dataset(path_src)[:train_num]
+        targets = read_dataset(path_trg)[:train_num]
+        train_set = [(source, target) for source, target in zip(sources, targets)]
+        for source, target in train_set:
+            dataset_train.append({
+                'source': source,
+                'target': target,
+                'source_language': train_name,
+                'target_language': 'English'
+            })
+    random.shuffle(dataset_train)
+    return dataset_train
+
+def read_afri_math_train(train_num):
+    train_set = read_dataset('./datas/african_query_translation/math.json')
+    train_sets = {}
+    for sample in train_set:
+        lang = sample['lang']
+        sample = {
+            'source': sample['query'],
+            'target': sample['response'],
+            'source_language': lang,
+            'target_language': 'English'
+        }
+        if lang not in train_sets:
+            train_sets[lang] = [sample]
+        else:
+            if len(train_sets[lang]) < train_num:
+                train_sets[lang].append(sample)
+    dataset_train = []
+    for lang in train_sets:
+        dataset = train_sets[lang]
+        for sample in dataset:
+            dataset_train.append(sample)
+    random.shuffle(dataset_train)
+    return dataset_train
+
+def read_afrimgsm():
+    langs_map = {
+        "amh": "Amharic",
+        "eng": "English",
+        "ewe": "Ewe",
+        "fra": "French",
+        "hau": "Hausa",
+        "ibo": "Igbo",
+        "kin": "Kinyarwanda",
+        "lin": "Lingala",
+        "lug": "Luganda",
+        "orm": "Oromo",
+        "sna": "Shona",
+        "sot": "Sotho",
+        "swa": "Swahili",
+        "twi": "Twi",
+        # "vai": "Vai", # poor performance due to its unique script
+        "wol": "Wolof",
+        "xho": "Xhosa",
+        "yor": "Yoruba",
+        "zul": "Zulu"
+    }
+
+    datasets_test = {}
+    for lang in langs_map:
+        ds = load_dataset("masakhane/afrimgsm", lang, split="test")
+        samples = []
+        for sample in ds:
+            samples.append({
+                'source': str(sample['question']),
+                'target': str(sample['answer_number']),
+                'source_language': langs_map[lang],
+                'target_language': langs_map[lang]
+            })
+
+        datasets_test[langs_map[lang]] = samples
+
+    return datasets_test
 
 def read_lego(train_num, languages):
     dataset_train = []
