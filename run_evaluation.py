@@ -1,5 +1,5 @@
 import torch.fx
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, AutoConfig
 import torch
 from tools.read_datasets import *
 from tools.utils import save_model, set_seed, extract_last_num
@@ -80,73 +80,41 @@ def main(args):
         gradient_accumulation_steps=gradient_accumulation,
     )
 
-    encoder_layers = [
-        0,
-        1,
-        2,
-        3,
-        4,
-        5,
-        6,
-        7,
-        8,
-        9,
-        10,
-        11,
-        12,
-        13,
-        14,
-        15,
-        16,
-        17,
-        18,
-        19,
-        20,
-        21,
-        22,
-        23,
-    ]
-    language_layers = [
-        0,
-        1,
-        2,
-        3,
-        4,
-        5,
-        6,
-        7,
-        8,
-        9,
-        10,
-        11,
-        12,
-        13,
-        14,
-        15,
-        16,
-        17,
-        18,
-        19,
-        20,
-        21,
-        22,
-        23,
-        24,
-        25,
-        26,
-        27,
-        28,
-        29,
-        30,
-        31,
-    ]
-    # encoder_layers=[16,17,18,19,20,21,22,23]
-    # language_layers=[0,1,2,3,4,5,6,7]
+    mt_cfg  = AutoConfig.from_pretrained(mt_path)
+    llm_cfg = AutoConfig.from_pretrained(llm_path)
+
+    enc_layers_count = getattr(mt_cfg, "num_layers", None)
+    if enc_layers_count is None:
+        enc_layers_count = getattr(mt_cfg, "encoder_layers", None)
+    if enc_layers_count is None:
+        raise ValueError(f"Couldn't find encoder layer count in config for {mt_path}")
+    
+    llm_layers_count = (
+        getattr(llm_cfg, "num_hidden_layers", None)
+        or getattr(llm_cfg, "n_layer", None)
+        or getattr(llm_cfg, "num_layers", None)
+    )
+    if llm_layers_count is None:
+        raise ValueError(f"Couldn't find language model layer count in config for {llm_path}")
+    
+    encoder_layers  = list(range(enc_layers_count))
+    language_layers = list(range(llm_layers_count))
+
+    # --- Dimensions / heads from configs (avoid hardcoding 2048/4096/32) ---
+    encoder_hidden_dim   = getattr(mt_cfg,  "d_model", None)
+    language_hidden_dim  = getattr(llm_cfg, "hidden_size", None)
+    num_attention_heads  = (
+        getattr(llm_cfg, "num_attention_heads", None)
+        or getattr(llm_cfg, "n_head", None)
+    )
+    if encoder_hidden_dim is None or language_hidden_dim is None or num_attention_heads is None:
+        raise ValueError("Missing dims/heads in configs; check model types.")
+
     encoder_aligner_config = {
-        "encoder_hidden_dim": 2048,
-        "language_hidden_dim": 4096,
+        "encoder_hidden_dim": encoder_hidden_dim,
+        "language_hidden_dim": language_hidden_dim,
         "num_transformer_submodules": 1,
-        "num_attention_heads": 32,
+        "num_attention_heads": num_attention_heads,
         "num_encoder_layers": len(encoder_layers),
         "num_language_layers": len(language_layers),
         "encoder_layers": encoder_layers,
