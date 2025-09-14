@@ -9,4 +9,4 @@ sentencepiece==0.2.1
 # tokenizers==0.15.2
 torch==2.6.0+computecanada
 tqdm==4.67.1
-transformers==4.38.2
+transformers==4.42.3
