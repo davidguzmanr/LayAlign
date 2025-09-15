@@ -119,7 +119,7 @@ def save_with_accelerate(
     output_file = output_dir
     accelerator.wait_for_everyone()
     accelerator.save_model(
-        model, output_file, max_shard_size="30GB", safe_serialization=False
+        model, output_file, max_shard_size="100GB", safe_serialization=False
     )
 
 
