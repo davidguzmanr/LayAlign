@@ -197,7 +197,7 @@ def save_with_accelerate(accelerator, model, output_dir, model_name='pytorch_mod
     os.makedirs(output_dir, exist_ok=True)
     output_file = output_dir
     accelerator.wait_for_everyone()
-    accelerator.save_model(model, output_file, max_shard_size="30GB",safe_serialization=False)
+    accelerator.save_model(model, output_file, max_shard_size="100GB",safe_serialization=False)
 
 
 
