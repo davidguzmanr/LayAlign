@@ -65,106 +65,76 @@ class AdaptedAttention(nn.Module):
         """
         Forward pass for the adapter which wraps the original LlamaAttention module.
 
-        Notes:
-        - Supports both 2-item and 3-item returns from the wrapped attention module
-            (HF Transformers versions may return (attn_output, past_key_value) or
-            (attn_output, attn_weights, past_key_value), or a dataclass with fields).
-        - We do not support returning attention weights here.
+        "Official" paper implementation:
+        https://github.com/ZrrSkywalker/LLaMA-Adapter/blob/41c3546fe1997ab8a65809dc8d8f9252b19d9faf/llama/model.py#L141
+
+        Args:
+            kwargs: See the original LlamaAttention module.
         """
-        # HF uses 'output_attentions' (plural), but handle either just in case.
-        if kwargs.get("output_attentions", False) or kwargs.get("output_attention", False):
-            raise NotImplementedError("output_attentions is not currently supported.")
+        if kwargs.get("output_attention", False):
+            raise NotImplementedError("output_attention is not currently supported.")
 
-        # Ask the attention module to provide/use cache when supported.
-        kwargs.setdefault("use_cache", True)
-
-        # Call the wrapped attention module
-        res = self.model(**kwargs)
-
-        # Normalize outputs across HF versions
-        if isinstance(res, tuple):
-            if len(res) == 3:
-                # (attn_output, attn_weights, past_key_value)
-                output, _, past_key_value = res
-            elif len(res) == 2:
-                # (attn_output, past_key_value)  OR  (attn_output, attn_weights)
-                output, second = res
-                # Heuristic: cache is usually a tuple/list or Cache-like object
-                if isinstance(second, (tuple, list)) or getattr(second, "get_seq_length", None) is not None:
-                    past_key_value = second
-                else:
-                    past_key_value = None
-            elif len(res) >= 1:
-                output = res[0]
-                past_key_value = None
-            else:
-                raise RuntimeError("Wrapped attention returned an empty tuple.")
-        else:
-            # Dataclass-style outputs
-            output = getattr(res, "last_hidden_state", res)
-            past_key_value = getattr(res, "past_key_values", None)
-
-        # Sanity check for adapter states
-        if not isinstance(self.adapter_states, (tuple, list)) and not torch.is_tensor(self.adapter_states):
-            raise RuntimeError("Adapter states not initialized. Call update_adapter_states(...) before forward().")
-        if torch.is_tensor(self.adapter_states) and self.adapter_states.numel() == 1:
-            raise RuntimeError("Adapter states are empty. Call update_adapter_states(...) before forward().")
-
+        output, _, past_key_value = self.model(**kwargs)
         bsz = output.shape[0]
         q_len = output.shape[1]
-
-        # Resolve adapter states for K and V
-        adapter_states_k = self.adapter_states[0]
-        adapter_states_v = self.adapter_states[1]
-        prefix_len = adapter_states_k.shape[1]
-
-        # Ensure dtype/device match attention projections
-        proj_dtype = self.model.q_proj.weight.dtype if self.model.q_proj.weight.dtype not in [torch.int8, torch.uint8] else torch.float32
-        device = output.device
-        adapter_states_k = adapter_states_k.to(device=device, dtype=proj_dtype)
-        adapter_states_v = adapter_states_v.to(device=device, dtype=proj_dtype)
-
-        # Figure out projection layer names from config
+        #embed_dim = output.shape[2]
+        prefix_len = self.adapter_states[0].shape[1]
         k_proj_layer = TRANSFORMERS_MODEL_CONFIG[self.model_type].k_proj_layer
         v_proj_layer = TRANSFORMERS_MODEL_CONFIG[self.model_type].v_proj_layer
         o_proj_layer = TRANSFORMERS_MODEL_CONFIG[self.model_type].o_proj_layer
+        factor = (
+            self.model.k_proj.in_features // self.model.k_proj.out_features
+        )  # Mistral has different input and output dimension for k_proj and v_proj layers
 
-        # Some models (e.g., Mistral) have different in/out dims for k/v proj
-        factor = self.model.k_proj.in_features // self.model.k_proj.out_features
-
-        # Project adapter states into K/V spaces
-        key = getattr(self.model, k_proj_layer)(adapter_states_k)     # (bsz, prefix_len, d_model_k)
-        value = getattr(self.model, v_proj_layer)(adapter_states_v)   # (bsz, prefix_len, d_model_v)
-
-        # Reshape to (bsz, num_heads//factor, prefix_len, head_dim) then transpose to (bsz, num_heads//factor, prefix_len, head_dim)
-        adapter_k = key.view(bsz, prefix_len, (self.model.num_heads // factor), self.model.head_dim).transpose(1, 2)
-        adapter_v = value.view(bsz, prefix_len, (self.model.num_heads // factor), self.model.head_dim).transpose(1, 2)
-
-        # Repeat heads if model uses group-query attention style
-        adapter_k = torch.repeat_interleave(adapter_k, repeats=factor, dim=1)  # (bsz, num_heads, prefix_len, head_dim)
-        adapter_v = torch.repeat_interleave(adapter_v, repeats=factor, dim=1)  # (bsz, num_heads, prefix_len, head_dim)
-
-        # Recompute query states with the same kwargs used by attention
+        # if k_proj_layer == v_proj_layer:
+        #     _, key, value = getattr(self.model, k_proj_layer)(self.adapter_states).split(embed_dim, dim=2)
+        # else:
+        #self.adaption_prompt = nn.Parameter(self.adaption_prompt.repeat(batch_size, 1, 1))
+        #self.adaption_prompt = self.adaption_prompt.expand(bsz, 1, self.model.hidden_size)
+        adapter_states_k = self.adapter_states[0]
+        adapter_states_v = self.adapter_states[1]
+        #adapter_states_k = torch.cat((self.adaption_prompt, adapter_states_k), dim=1)
+        #adapter_states_v = torch.cat((self.adaption_prompt, adapter_states_v), dim=1)
+        key = getattr(self.model, k_proj_layer)(adapter_states_k)
+        value = getattr(self.model, v_proj_layer)(adapter_states_v)
+        
+        # (bsz, nadapter_len, dim)
+        adapter_k = (
+            key.view(bsz, prefix_len, (self.model.num_heads // factor), self.model.head_dim)
+            .transpose(1, 2)
+        )
+        adapter_v = (
+            value.view(bsz, prefix_len, (self.model.num_heads // factor), self.model.head_dim)
+            .transpose(1, 2)
+        )
+        # Below is taken from https://github.com/huggingface/transformers/blob/e547458c43dfdbbb8f6a7757237e234c44e20a8f/src/transformers/models/mistral/modeling_mistral.py#L181
+        # (bsz, num_heads, adapter_len, head_dim)
+        adapter_k = torch.repeat_interleave(adapter_k, repeats=factor, dim=1)
+        adapter_v = torch.repeat_interleave(adapter_v, repeats=factor, dim=1)
+        # Recompute query states.
         compute_query_states = TRANSFORMERS_MODEL_CONFIG[self.model_type].compute_query_states
-        query_states = compute_query_states(model=self.model, **kwargs)  # (bsz, num_heads, q_len, head_dim)
+        # (bsz, num_heads, q_len, head_dim)
+        query_states = compute_query_states(model=self.model, **kwargs)
 
         previous_dtype = query_states.dtype
 
-        # Compute adapter attention scores: (bsz, num_heads, q_len, prefix_len)
-        scores = torch.matmul(query_states, adapter_k.transpose(2, 3).to(previous_dtype)) / math.sqrt(self.model.head_dim)
-        # Upcast for softmax stability, then gate
-        scores = self.adaption_gate * torch.softmax(scores, dim=-1, dtype=torch.float32).to(previous_dtype)
-
-        # Weighted sum over adapter values -> (bsz, q_len, num_heads*head_dim)
+        # (bsz, num_heads, q_len, adapter_len)
+        scores = torch.matmul(query_states, adapter_k.transpose(2, 3).to(previous_dtype)) / math.sqrt(
+            self.model.head_dim
+        )
+        # Upcast attention to fp32
+        # (bsz, num_heads, q_len, adapter_len)
+        scores = self.adaption_gate * F.softmax(scores, dim=-1, dtype=torch.float32).to(previous_dtype)
+        # (bsz, q_len, num_heads * head_dim)
         adapter_output = torch.matmul(scores, adapter_v).transpose(1, 2).reshape(bsz, q_len, -1)
-
-        # Optional output projection
+        
+        # (bsz, q_len, hidden_size)
         if o_proj_layer is not None:
             adapter_output = getattr(self.model, o_proj_layer)(adapter_output)
 
-        # Add adaption prompt output to original attention output
-        output = (output + adapter_output).to(previous_dtype)
+        # Add adaption prompt output to original output.
+        output = output + adapter_output
 
-        # Keep original API: (output, attn_weights=None, past_key_value)
+        # Restore original dtype.
+        output = output.to(previous_dtype)
         return output, None, past_key_value
-
