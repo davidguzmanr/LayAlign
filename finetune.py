@@ -20,7 +20,7 @@ from tools.input_features import *
 from LayAlign import LayAlign, LayAlignConfig
 from evaluation import accelerate_evaluate_ppl
 import wandb
-from dotenv import load_dotenv
+# from dotenv import load_dotenv
 from types import SimpleNamespace
 from transformers import AutoTokenizer, AutoConfig, get_scheduler
 from accelerate.utils import set_seed
